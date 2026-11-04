@@ -16,6 +16,8 @@ from Bio import SeqIO
 from plasmideasel.DFTable import DFTable
 
 FEEDBACK_URL = 'https://forms.gle/NgiM4sSTDm83KyJQ8'
+HELP_URL = 'https://github.com/faulknerrainford/plasmidcanvas#readme'  # TODO: replace with docs URL
+CITATION_URL = 'https://github.com/faulknerrainford/plasmidcanvas'  # TODO: replace with citation URL
 SETTINGS_FILE = Path.home() / '.plasmidcanvas_settings.json'
 
 
@@ -116,7 +118,9 @@ class PlasmidEasel(ttk.Window):
         # Adding Help Menu
         help_ = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='Help', menu=help_)
-        # help_.add_command(label='PlasmidEasel Docs', command=None, state='disabled')
+        help_.add_command(label='Help', command=partial(webbrowser.open, HELP_URL))
+        help_.add_command(label='Feedback', command=partial(webbrowser.open, FEEDBACK_URL))
+        help_.add_command(label='Citation', command=partial(webbrowser.open, CITATION_URL))
 
         self.config(menu=menubar)
 
