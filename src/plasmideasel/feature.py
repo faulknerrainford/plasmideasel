@@ -1,11 +1,13 @@
+from __future__ import annotations
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.patches import FancyArrowPatch, Polygon, RegularPolygon, Wedge
 import numpy as np
+import math
 
-from plasmidcanvas._utils import circular_length, circular_midpoint, to_counter_clockwise
-from plasmidcanvas._curvedtext import CurvedText
-from plasmidcanvas._utils import DEFAULT_LABEL_FONT_SIZE
+from plasmideasel._utils import circular_length, circular_midpoint, to_counter_clockwise
+from plasmideasel._curvedtext import CurvedText
+from plasmideasel._utils import DEFAULT_LABEL_FONT_SIZE, DEFAULT_LABEL_TEXT_STYLE
 
 # ==================================
 # Abstract Feature Classes
@@ -19,8 +21,10 @@ class Feature:
 
     name: str
     color: str = _DEFAULT_COLOR
+    text_size: int = DEFAULT_LABEL_FONT_SIZE
+    label_text_style: str = DEFAULT_LABEL_TEXT_STYLE
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, text_size: int = 7, label_style: str = 'bases') -> None:
         """
         Initializes the Feature object.
 
@@ -28,10 +32,15 @@ class Feature:
         ----------
         name : str
             The name of the feature.
+        text_size : int
+            The size of label text.
         """
         self.set_name(name)
+        self.set_text_size(text_size)
+        self.set_label_style(label_style)
+        self.label_adjustment = [1, 1, 0]
 
-    def _render(self, ax: Axes, p_total_base_pairs: int, p_center, p_radius: float, p_line_width: float) -> None:
+    def _render(self, ax: Axes, p_total_base_pairs: int, p_center, p_radius: float, p_line_width: float, f_width: float) -> None:
         """
         Abstract method to render the feature on a matplotlib Axes object.
 
@@ -47,6 +56,8 @@ class Feature:
             The radius length of the plasmid.
         p_line_width : float
             The line width of the plasmid circle.
+        f_width: float
+            The width of the features
         """
         pass
 
@@ -94,12 +105,60 @@ class Feature:
         """
         self.color = color
 
+    def get_text_size(self) -> int:
+        """
+        Get the text size of the feature.
+
+        Returns
+        -------
+        int
+            The text size of the feature.
+        """
+        return self.text_size
+
+    def set_text_size(self, text_size: int) -> None:
+        """
+        Set the text size of the feature.
+
+        Parameters
+        ----------
+        text_size : int
+            The text size of the feature.
+        """
+        self.text_size = text_size
+
+    def get_label_text_style(self) -> str:
+        """
+        Get the text size of the feature.
+
+        Returns
+        -------
+        str
+            The text size of the feature.
+        """
+        return self.label_text_style
+
+    def set_label_style(self, label_text_style: str) -> None:
+        """
+        Set the text size of the feature.
+
+        Parameters
+        ----------
+        label_text_style : str
+            The text size of the feature.
+        """
+        self.label_text_style = label_text_style
+
+    def set_label_adjustment(self, label_adjustment: list):
+        self.label_adjustment = label_adjustment
+
 
 class MultiPairFeature(Feature):
     """
-    An abstract Feauture type that spans multiple base pairs
+    An abstract Feauture var_type that spans multiple base pairs
     """
     _label_font_size: int = DEFAULT_LABEL_FONT_SIZE
+    _label_text_style: str = DEFAULT_LABEL_TEXT_STYLE
 
     start_pair: int
     end_pair: int
@@ -125,6 +184,7 @@ class MultiPairFeature(Feature):
         super().__init__(name)
         self.set_start_pairs(start_pair)
         self.set_end_pairs(end_pair)
+        self.set_label_font_size(self.text_size)
 
     def length(self) -> int:
         """
@@ -227,6 +287,28 @@ class MultiPairFeature(Feature):
         """
         self._label_font_size = font_size
 
+    def get_label_text_style(self) -> str:
+        """
+        Get the text size of the feature.
+
+        Returns
+        -------
+        str
+            The text size of the feature.
+        """
+        return self.label_text_style
+
+    def set_label_text_style(self, label_text_style: str) -> None:
+        """
+        Set the text size of the feature.
+
+        Parameters
+        ----------
+        label_text_style : str
+            The text size of the feature.
+        """
+        self.label_text_style = label_text_style
+
     def get_label_styles(self) -> list[str]:
         """
         Get the list of label styles associated with the feature.
@@ -269,7 +351,7 @@ class MultiPairFeature(Feature):
         self.label_style = label_styles
 
     def _get_feature_labels(self, p_total_base_pairs: int, start_pair: int = None, end_pair: int = None,
-                            styles: list[str] = None) -> None:
+                            styles: list[str] = None, text_style: str = 'bases') -> None:
         """
         Get the labels associated with the feature based off the value of label_style
 
@@ -282,7 +364,9 @@ class MultiPairFeature(Feature):
         end_pair : int, optional
             The ending base pair.
         styles : list[str], optional
-            The list of label styles. Used to force the creation of a specific type of label if needed.
+            The list of label styles. Used to force the creation of a specific var_type of label if needed.
+        text_style: str, optional
+            The text styles to use.
 
         Returns
         -------
@@ -307,8 +391,9 @@ class MultiPairFeature(Feature):
             if style == "on-circle":
                 # Adds a curved label
                 label_text = f"{self.get_name()}"
-                label = CurvedMultiPairLabel(label_text, start_pair, end_pair)
+                label = CurvedMultiPairLabel(label_text, start_pair, end_pair, text_style)
                 label.set_orbit(self.get_orbit())
+                # TODO: possibly reset this to work with feature text size
                 label.set_font_size(self._label_font_size)
                 labels.append(label)
 
@@ -317,12 +402,16 @@ class MultiPairFeature(Feature):
                 # Calculate the midpoint, accounting for features that pass through 0 using circular_midpoint
                 label_base_pair_location: int = round(
                     circular_midpoint(start_pair, end_pair, p_total_base_pairs))
-                label_text = f"{self.get_name()} ({start_pair} - {end_pair})"
-                label = SinglePairLabel(label_text, label_base_pair_location)
+                if self.label_text_style == "bases":
+                    label_text = f"{self.get_name()} ({start_pair} - {end_pair})"
+                else:
+                    label_text = f"{self.get_name()}"
+                label = SinglePairLabel(label_text, label_base_pair_location, text_style)
                 label._orbit_ofset = self.get_orbit()
                 label.set_line_color(self.color)
                 label.set_font_size(self._label_font_size)
                 label.set_font_color(self.color)
+                label.set_label_adjustment(self.label_adjustment)
                 labels.append(label)
 
         return labels
@@ -334,7 +423,7 @@ class SinglePairFeature(Feature):
     """
     base_pair: int
 
-    def __init__(self, name: str, base_pair: int) -> None:
+    def __init__(self, name: str, base_pair: int, text_style: str) -> None:
         """
         Initializes the SinglePairFeature object.
 
@@ -344,9 +433,12 @@ class SinglePairFeature(Feature):
             The name of the feature.
         base_pair : int
             The base pair associated with the feature.
+        text_style : str
+            The label text styles to use.
         """
         super().__init__(name)
         self.set_base_pair(base_pair)
+        self.set_label_style(text_style)
 
     def get_base_pair(self) -> int:
         """
@@ -479,8 +571,10 @@ class SinglePairLabel(SinglePairFeature, LabelBase):
 
     # Used internally for making label lines longer for internal orbits
     _orbit_ofset: int = 0
+    # TODO: Add second offset for features close to other features (used alternatingly if multiple in a row are too close)
+    label_text_style: str = 'bases'
 
-    def __init__(self, name: str, base_pair: int) -> None:
+    def __init__(self, name: str, base_pair: int, text_style: str) -> None:
         """
         Initializes the SinglePairLabel object.
 
@@ -491,10 +585,12 @@ class SinglePairLabel(SinglePairFeature, LabelBase):
         base_pair : int
             The base pair associated with the label.
         """
-        super().__init__(name=name, base_pair=base_pair)
+        super().__init__(name=name, base_pair=base_pair, text_style=text_style)
         LabelBase.__init__(self, name)
+        self.set_font_size(self.text_size)
+        self.label_text_style = text_style
 
-    def _render(self, ax: Axes, p_total_base_pairs: int, p_center, p_radius: float, p_line_width: float) -> None:
+    def _render(self, ax: Axes, p_total_base_pairs: int, p_center, p_radius: float, p_line_width: float, f_width: float) -> None:
         """
         Renders the label on the provided Axes object.
 
@@ -510,29 +606,50 @@ class SinglePairLabel(SinglePairFeature, LabelBase):
             The radius of the plasmid.
         p_line_width : float
             The width of the lines connecting the label to the features.
+        f_width : float
+            The width of the features connected to the plasmid.
         """
         degrees = (self.get_base_pair() / p_total_base_pairs) * 360
+
         radians = np.deg2rad(degrees)
 
         # Calculate the x and y of the inner coordinates of the line
         start_xy = ((p_center[0] + p_radius) * np.sin(radians),
                     (p_center[1] + p_radius) * np.cos(radians))
 
-        # To make the line for the label stick out farther we times by a scale factor to make the radius larger
-        end_xy = (((p_center[0] + p_radius + (p_line_width * (2 + self._orbit_ofset))) * self.line_length_sf) * np.sin(
-            radians),
-                  ((p_center[1] + p_radius + (p_line_width * (2 + self._orbit_ofset)) * self.line_length_sf) * np.cos(
-                      radians)))
+        # Set line length sf based on label adjustment
+        self.set_line_length_sf(self.label_adjustment[0])
 
-        align = "left" if (degrees <= 180) else "right"
+        # To make the line for the label stick out farther we times by a scale factor to make the radius larger
+        end_xy = (((p_center[0] + p_radius + (f_width * (2 + self._orbit_ofset) * self.line_length_sf))
+                   * np.sin(radians)),
+                  ((p_center[1] + p_radius + (f_width * (2 + self._orbit_ofset) * self.line_length_sf))
+                   * np.cos(radians)))
+
+        h_align = "left" if (degrees <= 180) else "right"
+        if h_align == "left":
+            h_line_x = end_xy[0]+(f_width * (2 + self._orbit_ofset)
+                                  * self.label_adjustment[1])
+            label_x = h_line_x+20
+
+        else:
+            h_line_x = end_xy[0]-(f_width * (2 + self._orbit_ofset)
+                                  * self.label_adjustment[1])
+            label_x = h_line_x-20
 
         # Plot the line and text for the label
         # Using zorder=3 to bring the line and label forward so they dont get covered up by other overlapping features
 
         ax.plot([start_xy[0], end_xy[0]], [start_xy[1], end_xy[1]], color=self.get_line_color(),
                 alpha=self._DEFAULT_LINE_ALPHA, zorder=3)
-        ax.text(x=end_xy[0], y=end_xy[1], s=self.get_label_text(), fontsize=self.get_font_size(),
-                color=self.font_color, horizontalalignment=align, verticalalignment="center", zorder=3)
+
+        # Add horizontal line off the end of the main line to help position labels
+        ax.plot([end_xy[0], h_line_x], [end_xy[1], end_xy[1]], color=self.get_line_color(),
+                alpha=self._DEFAULT_LINE_ALPHA, zorder=3)
+
+        # text start based on position around circle to move label off the line
+        ax.text(x=label_x, y=end_xy[1], s=self.get_label_text(), fontsize=self.get_font_size(),
+                color=self.font_color, horizontalalignment=h_align, verticalalignment="center", zorder=3)
 
     def get_line_color(self) -> str:
         """
@@ -584,7 +701,7 @@ class RestrictionSite(SinglePairLabel):
     """
     A class representing a restriction site on a plasmid as an extention of SinglePairLabel.
     """
-    def __init__(self, text: str, base_pair: int) -> None:
+    def __init__(self, text: str, base_pair: int, text_style: str = 'bases') -> None:
         """
         Initializes the RestrictionSite object. Creating a label in the format "<text> (<base_pair>)". 
         For more control over the label text, use SinglePairLabel.
@@ -595,9 +712,21 @@ class RestrictionSite(SinglePairLabel):
             The text to display on the restiction site. e.g. "BspMI", "BfuAI, BspMI", "Multiple Cloning Site"
         base_pair : int
             The base pair position of the restriction site.
+        text_style  :   str
+            The text style of the label.
         """
-        super().__init__(text, base_pair)
-        self.set_label_text(f"{self.get_name()} ({self.get_base_pair()})")
+        super().__init__(text, base_pair, text_style)
+        if self.label_text_style == "bases":
+            self.set_label_text(f"{self.get_name()} ({self.get_base_pair()})")
+        else:
+            self.set_label_text(f"{self.get_name()}")
+
+    def set_label_text_style(self, style: str) -> None:
+        self.label_text_style = style
+        if self.label_text_style == "bases":
+            self.set_label_text(f"{self.get_name()} ({self.get_base_pair()})")
+        else:
+            self.set_label_text(f"{self.get_name()}")
 
 
 class CurvedMultiPairLabel(MultiPairFeature, LabelBase):
@@ -609,7 +738,7 @@ class CurvedMultiPairLabel(MultiPairFeature, LabelBase):
     # Set to either 'bottom' or 'top' to snap charecters to the bottom or top of the curve
     _alignment_to_curve: str = "bottom"
 
-    def __init__(self, name: str, start_pair: int, end_pair: int) -> None:
+    def __init__(self, name: str, start_pair: int, end_pair: int, text_style: str = 'bases') -> None:
         """
         Initializes the CurvedMultiPairLabel object.
 
@@ -624,8 +753,10 @@ class CurvedMultiPairLabel(MultiPairFeature, LabelBase):
         """
         super().__init__(name, start_pair, end_pair)
         LabelBase.__init__(self, name)
+        self.set_font_size(self.text_size)
+        self.label_text_style = text_style
 
-    def _render(self, ax: Axes, p_total_base_pairs: int, p_center, p_radius: float, p_line_width: float) -> None:
+    def _render(self, ax: Axes, p_total_base_pairs: int, p_center, p_radius: float, p_line_width: float, f_width: float) -> None:
         """
         Renders the curved label on the plot.
 
@@ -641,6 +772,8 @@ class CurvedMultiPairLabel(MultiPairFeature, LabelBase):
             The radius of the plot.
         p_line_width : float
             The width of the line.
+        f_width : float
+            The width of the features.
         """
 
         start_radians = np.deg2rad((self.get_start_pair() / p_total_base_pairs) * 360)
@@ -696,8 +829,8 @@ class CurvedMultiPairLabel(MultiPairFeature, LabelBase):
         ORBIT_GAP_SF = 1.25
 
         # Scale the curve out to the radius of the circle minus the line width, adjusted for text height
-        scaled_curve = [[x * (p_center[0] + (p_radius - (p_line_width / 2) - (text_height))) for x in curve[0]],
-                        [y * (p_center[1] + (p_radius - (p_line_width / 2) - (text_height))) for y in curve[1]]]
+        scaled_curve = [[x * (p_center[0] + (p_radius - (f_width / 2) - (text_height))) for x in curve[0]],
+                        [y * (p_center[1] + (p_radius - (f_width / 2) - (text_height))) for y in curve[1]]]
 
         # ================================================================
 
@@ -733,6 +866,7 @@ class CurvedMultiPairLabel(MultiPairFeature, LabelBase):
         """
         return self._alignment_to_curve
 
+
 class RectangleFeature(MultiPairFeature):
     """
     A class representing a curved rectangular feature associated with multiple base pairs on a plasmid.
@@ -740,7 +874,7 @@ class RectangleFeature(MultiPairFeature):
 
     line_width_scale_factor: float = 1
 
-    def _render(self, ax: Axes, p_total_base_pairs: int, p_center, p_radius: float, p_line_width: float) -> None:
+    def _render(self, ax: Axes, p_total_base_pairs: int, p_center, p_radius: float, p_line_width: float, f_width: float) -> None:
         """
         Renders the rectangular feature on the plot.
 
@@ -756,6 +890,8 @@ class RectangleFeature(MultiPairFeature):
             The radius of the plot.
         p_line_width : float
             The width of the line.
+        f_width : float
+            The width of the feature.
         """
 
         # Creating a rectangle
@@ -777,10 +913,10 @@ class RectangleFeature(MultiPairFeature):
         # 3 - Place the wedge
 
         # Amount to stretch the arrow outwards / inwards to achieve the line width scale effect
-        adjust_amount = ((p_line_width * self.get_line_width_scale_factor()) - p_line_width) / 2
+        adjust_amount = ((f_width * self.get_line_width_scale_factor()) - f_width) / 2
         line_width_adjusted_radius = p_radius + adjust_amount
         rectangle = Wedge(center=p_center, r=line_width_adjusted_radius, theta1=theta_1, theta2=theta_2,
-                          width=(p_line_width * self.get_line_width_scale_factor()), color=self.color)
+                          width=(f_width * self.get_line_width_scale_factor()), color=self.color)
         ax.add_patch(rectangle)
 
         # Labelling
@@ -789,7 +925,7 @@ class RectangleFeature(MultiPairFeature):
         if "none" not in list(dict.fromkeys(self.label_style)):
             labels = self._get_feature_labels(p_total_base_pairs)
             for label in labels:
-                label._render(ax, p_total_base_pairs, p_center, p_radius, p_line_width)
+                label._render(ax, p_total_base_pairs, p_center, p_radius, p_line_width, f_width)
 
     def get_line_width_scale_factor(self) -> float:
         """
@@ -812,6 +948,7 @@ class RectangleFeature(MultiPairFeature):
             The scale factor for the width of the rectangle.
         """
         self.line_width_scale_factor = sf
+
 
 class DirectionalMultiPairFeature(MultiPairFeature):
     """
@@ -867,13 +1004,14 @@ class DirectionalMultiPairFeature(MultiPairFeature):
                 f"{direction} is an invalid direction value. Direction can only be 1 (clockwise) or -1 (anti-clockwise)")
         self.direction = direction
 
+
 class ArrowFeature(DirectionalMultiPairFeature):
     """
     A class representing a curved arrow feature associated with multiple base pairs on a plasmid.
     """
     line_width_scale_factor: float = 1
 
-    def _render(self, ax: Axes, p_total_base_pairs: int, p_center, p_radius: float, p_line_width: float) -> None:
+    def _render(self, ax: Axes, p_total_base_pairs: int, p_center, p_radius: float, p_line_width: float, f_width: float) -> None:
         """
         Renders the arrow feature on the provided axes.
 
@@ -889,6 +1027,8 @@ class ArrowFeature(DirectionalMultiPairFeature):
             The radius of the plasmid.
         p_line_width : float
             The width of the line representing the plasmid.
+        f_width : float
+            The width of the feature.
         """
 
         # NOTE - To clarify the mentions of "start" and "end" of an arrow
@@ -900,9 +1040,9 @@ class ArrowFeature(DirectionalMultiPairFeature):
         # This avoids distortion if the arrows are too long, but allows smaller features to still have
         # a visable arrow
         MAX_PERCENT_AS_ARROW_HEAD = 0.50
-        ARROW_LENGTH_CAP = p_total_base_pairs * 0.015
+        ARROW_LENGTH_CAP = p_total_base_pairs * 0.01
         max_arrow_length = circular_length(self.get_start_pair(), self.get_end_pair(), p_total_base_pairs) * MAX_PERCENT_AS_ARROW_HEAD
-        length_of_arrow_head = max_arrow_length if max_arrow_length < ARROW_LENGTH_CAP else ARROW_LENGTH_CAP
+        length_of_arrow_head = math.floor(max_arrow_length if max_arrow_length < ARROW_LENGTH_CAP else ARROW_LENGTH_CAP)
 
         # ======= Determining the arrow start and end ========
 
@@ -925,15 +1065,15 @@ class ArrowFeature(DirectionalMultiPairFeature):
 
         # ======== Work out three points to assemble the traingle =======
 
-        triangle_front_xy = ((p_center[0] + p_radius - (p_line_width / 2)) * np.sin(angle_of_arrow_end_radians),
-                             (p_center[1] + p_radius - (p_line_width / 2)) * np.cos(angle_of_arrow_end_radians))
+        triangle_front_xy = ((p_center[0] + p_radius - (f_width / 2)) * np.sin(angle_of_arrow_end_radians),
+                             (p_center[1] + p_radius - (f_width / 2)) * np.cos(angle_of_arrow_end_radians))
 
         # Amount to stretch the arrow outwards / inwards to achieve the line width scale effect
         adjust_amount = ((p_line_width * self.get_line_width_scale_factor()) - p_line_width) / 2
 
-        triangle_point_inner_circle_xy = (((p_center[0] + p_radius - p_line_width - adjust_amount) * np.sin(
+        triangle_point_inner_circle_xy = (((p_center[0] + p_radius - f_width - adjust_amount) * np.sin(
             angle_of_arrow_start_radians)),
-                                           ((p_center[1] + p_radius - p_line_width - adjust_amount) * np.cos(
+                                           ((p_center[1] + p_radius - f_width - adjust_amount) * np.cos(
                                                angle_of_arrow_start_radians)))
 
         triangle_point_outer_circle_xy = (((p_center[0] + p_radius + adjust_amount) * np.sin(
@@ -973,9 +1113,9 @@ class ArrowFeature(DirectionalMultiPairFeature):
         if "none" not in list(dict.fromkeys(self.label_style)):
             labels = self._get_feature_labels(p_total_base_pairs, self.get_start_pair(), self.get_end_pair())   
             for label in labels:
-                    label._render(ax, p_total_base_pairs, p_center, p_radius, p_line_width)
+                    label._render(ax, p_total_base_pairs, p_center, p_radius, p_line_width, f_width)
 
-        rectangle._render(ax, p_total_base_pairs, p_center, p_radius, p_line_width)
+        rectangle._render(ax, p_total_base_pairs, p_center, p_radius, p_line_width, f_width)
 
     def get_line_width_scale_factor(self) -> float:
         """
