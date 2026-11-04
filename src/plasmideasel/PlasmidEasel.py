@@ -9,8 +9,15 @@ from ttkbootstrap.validation import *
 from plasmideasel import Plasmid, draw_plasmid
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg)
 from functools import partial
+import json
+import webbrowser
+from pathlib import Path
 from Bio import SeqIO
 from plasmideasel.DFTable import DFTable
+
+FEEDBACK_URL = 'https://forms.gle/NgiM4sSTDm83KyJQ8'
+SETTINGS_FILE = Path.home() / '.plasmidcanvas_settings.json'
+
 
 class PlasmidEasel(ttk.Window):
     """
@@ -66,7 +73,10 @@ class PlasmidEasel(ttk.Window):
         self.plasmid_title = tk.StringVar(None, "TORC")
         self.plasmid_bps = tk.IntVar(None, 1200)
         self.PLASMID: Plasmid = Plasmid(self.plasmid_title.get(), self.plasmid_bps.get())
-        self.PLASMID_DF: pd.DataFrame = pd.DataFrame()
+        # Start with a single blank feature so the table is usable without loading a file
+        self.PLASMID_DF: pd.DataFrame = pd.DataFrame(
+            [[1, "", "", 0, 0, 0, "black"]],
+            columns=["index", "name", "type", "start", "end", "direction", "colour"])
         self.SEPARATORS = {"tsv": "\t", "csv": ","}
         self.FIG = self.PLASMID.plot()
         self.fig_size = (3, 3)
@@ -128,6 +138,10 @@ class PlasmidEasel(ttk.Window):
         controlpannels.columnconfigure(0, weight=1)
         controlpannels.rowconfigure(0, weight=1)
 
+        self.table.load_data()
+        self.features.load_data()
+        self.features.watch_table()
+
     def open_file(self):
         """
         Open a CSV, TSV or GenBank file and load its contents.
@@ -138,9 +152,11 @@ class PlasmidEasel(ttk.Window):
         """
         filename = filedialog.askopenfilename(defaultextension='.csv',
                                               filetypes=[('CSV files', '*.csv'), ('TSV Files', '*.tsv'), ('Genbank', '*.gb')])
+        if not filename:
+            return
         if filename.endswith('.csv') or filename.endswith('.tsv'):
-            file = open(filename, mode='r')
-            contents = file.readlines()
+            with open(filename, mode='r') as file:
+                contents = file.readlines()
             self.plasmid_bps.set(int(contents[1]))
             self.plasmid_title.set(contents[0].split()[0])
             # HEADER = contents[0].split()[1:]
@@ -193,7 +209,48 @@ class PlasmidEasel(ttk.Window):
         """
         filename = filedialog.asksaveasfilename(filetypes=[('PNG files', '*.png'), ('SVG files', '*.svg'),
                                                            ('PDF files', '*.pdf'), ('JPG files', '*.jpg')])
+        if not filename:
+            return
         self.PLASMID.save_to_file(filename)
+        self.show_feedback_prompt()
+
+    def show_feedback_prompt(self):
+        """
+        Ask the user for feedback after a save, unless they opted out.
+
+        Shows a dialog with a feedback link, a checkbox to suppress future
+        prompts (stored in a settings file in the home directory) and a
+        close button.
+        """
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except (OSError, ValueError):
+            settings = {}
+        if settings.get('hide_feedback_prompt'):
+            return
+
+        dialog = ttk.Toplevel(self)
+        dialog.title('Feedback')
+        dialog.transient(self)
+        ttk.Label(dialog, text='Thanks for using PlasmidCanvas!\nPlease let us know what you think by submitting feedback:',
+                  justify='center').pack(padx=20, pady=(20, 5))
+        link = ttk.Label(dialog, text=FEEDBACK_URL, foreground='#1a73e8', cursor='hand2')
+        link.pack(padx=20, pady=5)
+        link.bind('<Button-1>', lambda _e: webbrowser.open(FEEDBACK_URL))
+        hide_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(dialog, text="Don't show this again", variable=hide_var).pack(padx=20, pady=5)
+
+        def close():
+            if hide_var.get():
+                settings['hide_feedback_prompt'] = True
+                try:
+                    SETTINGS_FILE.write_text(json.dumps(settings))
+                except OSError:
+                    pass
+            dialog.destroy()
+
+        ttk.Button(dialog, text='Close', command=close).pack(padx=20, pady=(5, 20))
+        dialog.protocol('WM_DELETE_WINDOW', close)
 
     def redraw_plasmid(self):
         """
@@ -278,7 +335,7 @@ class PlasmidEasel(ttk.Window):
                 self.table.Table.undo_delete_row(command[1], command[2], command[3], command[4])
             elif command[0] == "ADD_ROW":
                 ind = self.table.Table.table_df.shape[0] - 1
-                self.table.Table.delete_row(ind + 1, self.table.Table.table_df.iloc[ind]['name'].get(), index_1=True, log=False)
+                self.table.Table.delete_row(ind + 1, self.table.Table.table_df.iloc[ind]['name'].get(), index_1=True)
             self.commands_pointer -= 1
         self.edit.entryconfig('Redo', state=tk.NORMAL)
         if self.commands_pointer == 0:
@@ -520,10 +577,8 @@ class TablePanel(ttk.Frame):
             If ``True`` (default), records the operation in the undo history.
         """
         self.Table.add_row()
-        self.RowPanel.add_row()
-        self.delete_select['values']= tuple([str(ind.get())+'. '+label.get() for ind, label in zip(self.Table.table_df['index'],self.Table.table_df['name'])])
         if log:
-            self.master.Easel.command_add(("ADD_ROW"))
+            self.Easel.command_add(("ADD_ROW",))
 
     def apply_to_plasmid(self):
         """
@@ -579,26 +634,9 @@ class TablePanel(ttk.Frame):
                 file.write(f"{title}\n{self.Easel.plasmid_bps.get()}\n")
                 updated_df.to_csv(file, sep=separator, index=False, lineterminator='\n')
             messagebox.showinfo("Success", f"Data saved to:\n{filename}")
+            self.Easel.show_feedback_prompt()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save file:\n{str(e)}")
-
-    def add_row(self):
-        """
-        Show or create a delete button for a newly added table row.
-
-        If a previously hidden button exists it is re-gridded at the correct
-        position; otherwise a new button is created and appended to
-        ``self.buttons``.
-        """
-        row_count = self.Table.table_df.shape[0]
-        if len(self.buttons) >= row_count:
-            self.buttons[row_count-1].grid(row=row_count, column=0, sticky='nsew', pady=4, padx=5)
-        else:
-            button = ttk.Button(self, text=self.delete_icon, bootstyle=(INFO, OUTLINE),
-                                command=lambda: self.delete_row(row_count))
-            button.grid(row=row_count, column=0, sticky='nsew', pady=4, padx=5)
-            self.buttons.append(button)
-
 
 class FeaturePanel(ttk.Frame):
     """
@@ -638,27 +676,56 @@ class FeaturePanel(ttk.Frame):
         self.type_frames = {}
         self.columnconfigure(0, weight=1)
 
+    def current_types(self) -> list:
+        """
+        Return the sorted unique, non-empty feature types currently in the table.
+
+        Reads the live table values when a table is loaded, falling back to
+        ``Easel.PLASMID_DF`` otherwise.
+        """
+        table = self.Easel.table.Table if getattr(self.Easel, 'table', None) else None
+        if table is not None and 'type' in table.table_df.columns:
+            types = {str(v.get()).strip() for v in table.table_df['type']}
+        elif 'type' in self.Easel.PLASMID_DF.columns:
+            types = {str(v).strip() for v in self.Easel.PLASMID_DF['type']}
+        else:
+            types = set()
+        return sorted(t for t in types if t and t != 'None')
+
+    def refresh(self):
+        """Rebuild the type toggles if the types in the table have changed."""
+        if sorted(self.type_toggles) != self.current_types():
+            self.load_data()
+
+    def watch_table(self, interval_ms: int = 500):
+        """Periodically refresh the toggles so table edits, adds, deletes and undos are reflected."""
+        try:
+            self.refresh()
+        except (tk.TclError, KeyError, AttributeError):
+            pass  # table is mid-rebuild; retry on the next tick
+        self.after(interval_ms, self.watch_table, interval_ms)
+
     def load_data(self):
         """
-        Build the feature type toggles from unique types in PLASMID_DF.
+        Build the feature type toggles from the types currently in the table.
 
         Clears existing toggles and creates a new one for each unique
-        feature type. Each toggle controls the 'show' column for all
-        rows of that type.
+        feature type, preserving the state of toggles that still exist.
+        Each toggle controls the 'show' column for all rows of that type.
         """
+        previous_states = {t: v.get() for t, v in self.type_toggles.items()}
+
         # Clear existing toggles
         for widget in self.winfo_children():
-            widget.grid_forget()
+            widget.destroy()
         self.type_toggles.clear()
         self.type_frames.clear()
 
-        # Get unique types from DataFrame
-        if self.Easel.PLASMID_DF.empty or 'type' not in self.Easel.PLASMID_DF.columns:
+        unique_types = self.current_types()
+        if not unique_types:
             empty_label = ttk.Label(self, text='No features loaded')
             empty_label.grid(row=0, column=0, sticky='nsew', pady=5, padx=5)
             return
-
-        unique_types = sorted(self.Easel.PLASMID_DF['type'].unique())
 
         # Create a scrollable frame for many feature types
         canvas = ttk.Canvas(self, height=200)
@@ -680,7 +747,7 @@ class FeaturePanel(ttk.Frame):
 
         # Create toggle for each type
         for idx, feature_type in enumerate(unique_types):
-            var = ttk.BooleanVar(value=True)
+            var = ttk.BooleanVar(value=previous_states.get(feature_type, True))
             self.type_toggles[feature_type] = var
 
             callback = partial(self.on_type_toggle, feature_type)

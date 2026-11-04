@@ -2,7 +2,7 @@
 name = "plasmideasel"
 version = "1.0.0"
 description = "A graphics package for creating customised plasmid maps"
-authors = ["Penn Rainford <faulknerrainford@gmail.com", "th0mr <thomrobinson76@gmail.com>"]
+authors = ["Penn Rainford <faulknerrainford@gmail.com>", "th0mr <thomrobinson76@gmail.com>"]
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/faulknerrainford/plasmideasel"

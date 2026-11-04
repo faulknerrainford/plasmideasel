@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 import tkinter as tk
 from tkinter import colorchooser
 import ttkbootstrap as ttk
@@ -42,6 +43,10 @@ def columnTypeToVariable(var_type, value=True):
         return tk.StringVar(None, value)
 
 
+_INT_PARTIAL = re.compile(r'-?\d*')
+_FLOAT_PARTIAL = re.compile(r'-?\d*\.?\d*([eE][-+]?\d*)?')
+
+
 def add_validation(entry, col_type):
     """
     Add keystroke-level input validation to a tkinter Entry widget.
@@ -52,16 +57,13 @@ def add_validation(entry, col_type):
         The entry widget to validate.
     col_type : str
         The column type. ``'Int'`` and ``'Float'`` receive numeric validation;
-        all other values (including ``'String'``) receive text validation.
+        all other values (including ``'String'``) accept any text.
     """
-    if col_type == 'String':
-        add_text_validation(entry, when='key')
-    elif col_type == 'Int':
-        add_numeric_validation(entry, when='key')
-    elif col_type == 'Float':
-        add_numeric_validation(entry, when='key')
-    else:
-        add_text_validation(entry, when='key')
+    if col_type in ('Int', 'Float'):
+        # Allow partial input such as "-" so negative numbers can be typed.
+        pattern = _INT_PARTIAL if col_type == 'Int' else _FLOAT_PARTIAL
+        entry.configure(validate='key',
+                        validatecommand=(entry.register(lambda p: bool(pattern.fullmatch(p))), '%P'))
 
 
 class DFTable(ttk.Frame):
