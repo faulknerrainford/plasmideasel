@@ -31,8 +31,7 @@ editing plasmid maps from CSV, TSV or GenBank files.
    :maxdepth: 1
    :caption: Tutorials
 
-   tutorials/tutorial_csv
-   tutorials/tutorial_genbank
+   tutorials/tutorial
 
 .. toctree::
    :maxdepth: 1
