@@ -16,8 +16,8 @@ from Bio import SeqIO
 from plasmideasel.DFTable import DFTable
 
 FEEDBACK_URL = 'https://forms.gle/NgiM4sSTDm83KyJQ8'
-HELP_URL = 'https://github.com/faulknerrainford/plasmidcanvas#readme'  # TODO: replace with docs URL
-CITATION_URL = 'https://github.com/faulknerrainford/plasmidcanvas'  # TODO: replace with citation URL
+HELP_URL = 'https://plasmideasel.readthedocs.io/en/latest/'
+CITATION_URL = '10.5281/zenodo.23953202'
 SETTINGS_FILE = Path.home() / '.plasmidcanvas_settings.json'
 
 

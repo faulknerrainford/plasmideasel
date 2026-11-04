@@ -1,22 +1,21 @@
-# plasmidcanvas - A simple Python plasmid map creator
+# plasmideasel - A simple Python plasmid map creator GUI
 
-Installation, Usage and API referance, hosted on readthedocs [here](https://plasmidcanvas.readthedocs.io/en/latest/).
+Installation, Usage and API referance, hosted on readthedocs [here](https://plasmideasel.readthedocs.io/en/latest/).
 
-plasmidcanvas is a Python graphics package designed for producing customised plasmid maps. 
+plasmideasel is a GUI based on plasmidcanvas, a Python graphics package designed for producing customised plasmid maps. 
 
-**Top level overview of plasmidcanvas' current features as of v1.0.0**
+**Top level overview of plasmideasel' current features as of v1.0.0**
 
 * Directional arrows and rectangles to represent features of a plasmid.
 * Support for restriction sites.
 * Support for arbitrary labels.
 * Support for overlapping features by automatically moving features inwards.
 * Support for base pair "ticks".
-* Two types of plasmid base pair tick labels:
-    * auto - The circle is automatically labelled using the most suitable tick intervals.
-    * n_labels - The circle is given n labels, evenly spaced around the plasmid circle.
-* Two types of feature labels:
-    * off-circle - A label is placed outside the plasmid circle, pointing at the base pair / feature of interest.
-    * on-circle (curved text) - A label is placed on a feature and curves around the circle with the feature.
+* Support for genbank files.
+* Support for save and reload.
+* Select features shown
+* Modify features
+* Support for Default and Minimal styles
 * Plasmids can be saved to a variety of filetypes e.g. png, pdf, ps, eps and svg.
 
 
