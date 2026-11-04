@@ -25,7 +25,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install pyinstaller matplotlib ttkbootstrap pandas biopython
+        run: pip install pyinstaller "matplotlib>=3.8.3,<4" "ttkbootstrap>=1.20.2,<2" "pandas>=2.0,<4" "biopython>=1.83"
 
       - name: Build executable
         run: pyinstaller --onefile --paths src --collect-all ttkbootstrap --collect-submodules plasmideasel src/plasmideasel/PlasmidEasel.py
