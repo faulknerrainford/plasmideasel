@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest, macos-15-intel]
 
     runs-on: ${{ matrix.os }}
 
@@ -45,7 +45,8 @@ jobs:
             mv dist/PlasmidEasel dist/PlasmidEasel-linux
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             # Zip the .app bundle so executable permissions survive upload/download
-            ditto -c -k --sequesterRsrc --keepParent dist/PlasmidEasel.app dist/PlasmidEasel-macos.zip
+            ARCH=$([[ "$(uname -m)" == "arm64" ]] && echo arm64 || echo intel)
+            ditto -c -k --sequesterRsrc --keepParent dist/PlasmidEasel.app "dist/PlasmidEasel-macos-$ARCH.zip"
             rm -rf dist/PlasmidEasel dist/PlasmidEasel.app
           fi
         shell: bash
@@ -87,4 +88,5 @@ jobs:
           files: |
             PlasmidEasel-linux
             PlasmidEasel-windows.exe
-            PlasmidEasel-macos.zip
+            PlasmidEasel-macos-arm64.zip
+            PlasmidEasel-macos-intel.zip
