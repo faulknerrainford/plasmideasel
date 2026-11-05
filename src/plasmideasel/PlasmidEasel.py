@@ -516,11 +516,13 @@ class TablePanel(ttk.Frame):
         # Create canvas and scrollbar with specific height
         canvas = tk.Canvas(self.table_frame, highlightthickness=0, bg='white', height=400)
         scrollbar = ttk.Scrollbar(self.table_frame, orient='vertical', command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
+        h_scrollbar = ttk.Scrollbar(self.table_frame, orient='horizontal', command=canvas.xview)
+        canvas.configure(yscrollcommand=scrollbar.set, xscrollcommand=h_scrollbar.set)
         
-        # Grid canvas and scrollbar
+        # Grid canvas and scrollbars
         canvas.grid(row=0, column=0, sticky='nsew')
         scrollbar.grid(row=0, column=1, sticky='nsew')
+        h_scrollbar.grid(row=1, column=0, sticky='ew')
         
         # Create the table inside the canvas
         def on_delete_row(index, name):
@@ -544,13 +546,15 @@ class TablePanel(ttk.Frame):
         
         # Enable mouse wheel scrolling with proper event handling
         def on_mousewheel(event):
+            # Shift+wheel scrolls horizontally
+            scroll = canvas.xview_scroll if event.state & 0x1 else canvas.yview_scroll
             # Windows and MacOS use event.delta (positive = up, negative = down)
             if hasattr(event, 'delta') and event.delta != 0:
                 # Scroll up on positive delta, down on negative delta
-                canvas.yview_scroll(-1 if event.delta > 0 else 1, 'units')
+                scroll(-1 if event.delta > 0 else 1, 'units')
             # Linux uses event.num (4 = up, 5 = down)
             elif hasattr(event, 'num'):
-                canvas.yview_scroll(-1 if event.num == 4 else 1, 'units')
+                scroll(-1 if event.num == 4 else 1, 'units')
             return 'break'  # Prevent event propagation
         
         # Bind mousewheel to canvas

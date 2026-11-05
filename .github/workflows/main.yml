@@ -28,7 +28,14 @@ jobs:
         run: pip install pyinstaller "matplotlib>=3.8.3,<4" "ttkbootstrap>=1.20.2,<2" "pandas>=2.0,<4" "biopython>=1.83"
 
       - name: Build executable
-        run: pyinstaller --onefile --paths src --collect-all ttkbootstrap --hidden-import PIL._tkinter_finder --collect-submodules plasmideasel src/plasmideasel/PlasmidEasel.py
+        run: |
+          OPTS="--paths src --collect-all ttkbootstrap --hidden-import PIL._tkinter_finder --collect-submodules plasmideasel"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            pyinstaller --windowed --noconfirm $OPTS src/plasmideasel/PlasmidEasel.py
+          else
+            pyinstaller --onefile $OPTS src/plasmideasel/PlasmidEasel.py
+          fi
+        shell: bash
 
       - name: Rename executable
         run: |
@@ -37,7 +44,9 @@ jobs:
           elif [[ "$RUNNER_OS" == "Linux" ]]; then
             mv dist/PlasmidEasel dist/PlasmidEasel-linux
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            mv dist/PlasmidEasel dist/PlasmidEasel-macos
+            # Zip the .app bundle so executable permissions survive upload/download
+            ditto -c -k --sequesterRsrc --keepParent dist/PlasmidEasel.app dist/PlasmidEasel-macos.zip
+            rm -rf dist/PlasmidEasel dist/PlasmidEasel.app
           fi
         shell: bash
 
@@ -78,4 +87,4 @@ jobs:
           files: |
             PlasmidEasel-linux
             PlasmidEasel-windows.exe
-            PlasmidEasel-macos
+            PlasmidEasel-macos.zip
