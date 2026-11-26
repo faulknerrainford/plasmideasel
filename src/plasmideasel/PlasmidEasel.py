@@ -9,6 +9,7 @@ from ttkbootstrap.validation import *
 from plasmideasel import Plasmid, draw_plasmid
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg)
 from functools import partial
+import matplotlib.pyplot as plt
 import json
 import webbrowser
 from pathlib import Path
@@ -263,9 +264,16 @@ class PlasmidEasel(ttk.Window):
         Removes the previous canvas from the grid and places the new one in
         its position.
         """
+        old_fig = self.FIG
         self.FIG = self.PLASMID.plot()
         self.FIG.set_size_inches(self.fig_size[0], self.fig_size[1])
-        self.canvas_figures[-1].get_tk_widget().pack_forget()
+        # Destroy old canvases/widgets and close the old figure so pyplot
+        # doesn't accumulate open figures.
+        for old_canvas in self.canvas_figures:
+            old_canvas.get_tk_widget().destroy()
+        self.canvas_figures.clear()
+        if old_fig is not None and old_fig is not self.FIG:
+            plt.close(old_fig)
         new_canvas = FigureCanvasTkAgg(self.FIG, master=self)
         self.canvas_figures.append(new_canvas)
         new_canvas.draw_idle()
