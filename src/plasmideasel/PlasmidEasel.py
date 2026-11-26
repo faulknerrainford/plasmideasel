@@ -247,7 +247,7 @@ class PlasmidEasel(ttk.Window):
         dialog = ttk.Toplevel(self)
         dialog.title('Feedback')
         dialog.transient(self)
-        ttk.Label(dialog, text='Thanks for using PlasmidCanvas!\nPlease let us know what you think by submitting feedback:',
+        ttk.Label(dialog, text='Thanks for using PlasmidEasel\nPlease let us know what you think by submitting feedback:',
                   justify='center').pack(padx=20, pady=(20, 5))
         link = ttk.Label(dialog, text=FEEDBACK_URL, foreground='#1a73e8', cursor='hand2')
         link.pack(padx=20, pady=5)
