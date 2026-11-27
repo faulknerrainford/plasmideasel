@@ -9,6 +9,7 @@ from ttkbootstrap.validation import *
 from plasmideasel import Plasmid, draw_plasmid
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg)
 from functools import partial
+import matplotlib.pyplot as plt
 import json
 import webbrowser
 from pathlib import Path
@@ -49,8 +50,8 @@ class PlasmidEasel(ttk.Window):
         Feature data loaded from file.
     FIG : matplotlib.figure.Figure
         The active figure used for rendering.
-    fig_size : tuple of int
-        Width and height in inches for the matplotlib figure.
+    display_dpi : int
+        Resolution (dots per inch) used to display the figure on screen.
     canvas_figures : list of FigureCanvasTkAgg
         History of canvas objects; the last entry is the active one.
     plasmid_style : tk.StringVar
@@ -81,8 +82,7 @@ class PlasmidEasel(ttk.Window):
             columns=["index", "name", "type", "start", "end", "direction", "colour"])
         self.SEPARATORS = {"tsv": "\t", "csv": ","}
         self.FIG = self.PLASMID.plot()
-        self.fig_size = (3, 3)
-        self.FIG.set_size_inches(self.fig_size[0], self.fig_size[1])
+        self.display_dpi = 100
         self.canvas_figures = []
         self.plasmid_style = tk.StringVar(None, 'default')
         self.show_ticks = tk.BooleanVar(None, True)
@@ -90,6 +90,7 @@ class PlasmidEasel(ttk.Window):
         self.label_font_size = tk.IntVar(None, 7)
         self.include_bp_in_labels = tk.StringVar(None, 'bases')
         self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=3)
         self.columnconfigure(1, weight=1)
         self.commands_log: list[tuple] = [()]
         self.commands_pointer = 0
@@ -125,10 +126,20 @@ class PlasmidEasel(ttk.Window):
         self.config(menu=menubar)
 
         # Add canvas to draw figure on
-        CANVAS = FigureCanvasTkAgg(self.FIG, master=self)
-        self.canvas_figures.append(CANVAS)
-        CANVAS.draw()
-        CANVAS.get_tk_widget().grid(row=0, column=0, sticky='nsew')
+        figure_frame = ttk.Frame(self)
+        figure_frame.grid(row=0, column=0, sticky='nsew')
+        figure_frame.rowconfigure(0, weight=1)
+        figure_frame.columnconfigure(0, weight=1)
+        self.figure_canvas = tk.Canvas(figure_frame, width=450, height=450, highlightthickness=0)
+        self.figure_canvas.grid(row=0, column=0, sticky='nsew')
+        v_scroll = ttk.Scrollbar(figure_frame, orient='vertical', command=self.figure_canvas.yview)
+        v_scroll.grid(row=0, column=1, sticky='ns')
+        h_scroll = ttk.Scrollbar(figure_frame, orient='horizontal', command=self.figure_canvas.xview)
+        h_scroll.grid(row=1, column=0, sticky='ew')
+        self.figure_canvas.configure(xscrollcommand=h_scroll.set, yscrollcommand=v_scroll.set)
+        self._layout_state = None
+        self.figure_canvas.bind('<Configure>', self._layout_figure)
+        self._show_figure()
 
         # Add notebook for control pannels
         controlpannels = ttk.Notebook(self, bootstyle="secondary")
@@ -236,7 +247,7 @@ class PlasmidEasel(ttk.Window):
         dialog = ttk.Toplevel(self)
         dialog.title('Feedback')
         dialog.transient(self)
-        ttk.Label(dialog, text='Thanks for using PlasmidCanvas!\nPlease let us know what you think by submitting feedback:',
+        ttk.Label(dialog, text='Thanks for using PlasmidEasel\nPlease let us know what you think by submitting feedback:',
                   justify='center').pack(padx=20, pady=(20, 5))
         link = ttk.Label(dialog, text=FEEDBACK_URL, foreground='#1a73e8', cursor='hand2')
         link.pack(padx=20, pady=5)
@@ -256,20 +267,80 @@ class PlasmidEasel(ttk.Window):
         ttk.Button(dialog, text='Close', command=close).pack(padx=20, pady=(5, 20))
         dialog.protocol('WM_DELETE_WINDOW', close)
 
+    def _show_figure(self):
+        """
+        Display ``self.FIG`` in the scrollable canvas area at the size of its
+        full contents (labels included), as in saved files.
+        """
+        fig = self.FIG
+        fig.set_dpi(self.display_dpi)
+        fig.set_size_inches(6, 6)
+        ax = fig.axes[0]
+        renderer = fig.canvas.get_renderer()
+        pad = 0.1
+        tight = fig.get_tightbbox(renderer)
+        old = ax.get_position()
+        fig_w, fig_h = fig.get_size_inches()
+        new_w, new_h = tight.width + 2 * pad, tight.height + 2 * pad
+        # Re-express the axes position relative to the cropped figure
+        left = (old.x0 * fig_w - tight.x0 + pad) / new_w
+        bottom = (old.y0 * fig_h - tight.y0 + pad) / new_h
+        ax.set_position([left, bottom, old.width * fig_w / new_w, old.height * fig_h / new_h])
+        fig.set_size_inches(new_w, new_h)
+
+        self.figure_inches = (new_w, new_h)
+        for old_canvas in self.canvas_figures:
+            old_canvas.get_tk_widget().destroy()
+        self.canvas_figures.clear()
+        self.figure_canvas.delete('all')
+        new_canvas = FigureCanvasTkAgg(fig, master=self.figure_canvas)
+        self.canvas_figures.append(new_canvas)
+        self.figure_window = self.figure_canvas.create_window(0, 0, window=new_canvas.get_tk_widget(), anchor='center')
+        self._layout_figure(recentre=True)
+
+    def _layout_figure(self, event=None, recentre=False):
+        """
+        Scale the figure up to fill the window (never below its natural size),
+        centre it, and keep the scrollbars centred when the figure is larger
+        than the window.
+        """
+        if not self.canvas_figures:
+            return
+        view_w = max(self.figure_canvas.winfo_width(), 1)
+        view_h = max(self.figure_canvas.winfo_height(), 1)
+        fig_w, fig_h = self.figure_inches
+        scale = max(1.0, min(view_w / (fig_w * self.display_dpi), view_h / (fig_h * self.display_dpi)))
+        dpi = self.display_dpi * scale
+        px_w, px_h = int(fig_w * dpi), int(fig_h * dpi)
+        state = (px_w, px_h, view_w, view_h)
+        if state == self._layout_state and not recentre:
+            return
+        self._layout_state = state
+
+        canvas = self.canvas_figures[-1]
+        widget = canvas.get_tk_widget()
+        if px_w != widget.winfo_reqwidth() or px_h != widget.winfo_reqheight() or recentre:
+            canvas.figure.set_dpi(dpi)
+            widget.configure(width=px_w, height=px_h)
+            canvas.draw_idle()
+        region_w, region_h = max(px_w, view_w), max(px_h, view_h)
+        self.figure_canvas.configure(scrollregion=(0, 0, region_w, region_h))
+        self.figure_canvas.coords(self.figure_window, region_w / 2, region_h / 2)
+        self.figure_canvas.xview_moveto(max(region_w - view_w, 0) / 2 / region_w)
+        self.figure_canvas.yview_moveto(max(region_h - view_h, 0) / 2 / region_h)
+
     def redraw_plasmid(self):
         """
         Replace the active matplotlib canvas with a freshly drawn figure.
 
-        Removes the previous canvas from the grid and places the new one in
-        its position.
+        Closes the previous figure and shows the new one in the scrollable
+        canvas area.
         """
+        old_fig = self.FIG
         self.FIG = self.PLASMID.plot()
-        self.FIG.set_size_inches(self.fig_size[0], self.fig_size[1])
-        self.canvas_figures[-1].get_tk_widget().pack_forget()
-        new_canvas = FigureCanvasTkAgg(self.FIG, master=self)
-        self.canvas_figures.append(new_canvas)
-        new_canvas.draw_idle()
-        new_canvas.get_tk_widget().grid(row=0, column=0, sticky='nsew')
+        if old_fig is not None and old_fig is not self.FIG:
+            plt.close(old_fig)
+        self._show_figure()
 
     def update_plasmid(self, *kw):
         """
